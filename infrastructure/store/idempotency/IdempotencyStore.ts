@@ -35,16 +35,16 @@ class InMemoryIdempotencyStore implements IdempotencyStore {
 
     const entry = this.store.get(key);
     if (!entry) {
-      return null;
+      return Promise.resolve(null);
     }
 
     // Check if expired
     if (entry.expiresAt < new Date()) {
       this.store.delete(key);
-      return null;
+      return Promise.resolve(null);
     }
 
-    return entry.booking;
+    return Promise.resolve(entry.booking);
   }
 
   /**
@@ -71,6 +71,7 @@ class InMemoryIdempotencyStore implements IdempotencyStore {
     }, ttl);
 
     this.store.set(key, entry);
+    return Promise.resolve();
   }
 
   /**
@@ -111,6 +112,7 @@ class InMemoryIdempotencyStore implements IdempotencyStore {
       }
     }
     this.store.clear();
+    return Promise.resolve();
   }
 }
 

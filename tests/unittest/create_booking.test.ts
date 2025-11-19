@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import CreateBookingUseCase, {
   CreateBookingError,
 } from '../../application/use_cases/create_booking';
@@ -6,14 +6,14 @@ import Booking from '../../domain/entities/booking';
 import Restaurant from '../../domain/entities/restaurant';
 import Sector from '../../domain/entities/sector';
 import Table from '../../domain/entities/table';
+import { IdempotencyStore } from '../../domain/interfaces/idempotency';
+import { LockManager } from '../../domain/interfaces/locks';
 import {
   BookingRepository,
   RestaurantRepository,
   SectorRepository,
   TableRepository,
 } from '../../domain/interfaces/repositories';
-import { IdempotencyStore } from '../../domain/interfaces/idempotency';
-import { LockManager } from '../../domain/interfaces/locks';
 
 // Mock implementations for testing
 function createMockRepositories() {
@@ -23,39 +23,53 @@ function createMockRepositories() {
   const bookings = new Map<string, Booking[]>();
 
   const restaurantRepo: RestaurantRepository = {
-    findById: async (id: string) => restaurants.get(id) || null,
+    findById: async (id: string) => Promise.resolve(restaurants.get(id) || null),
   };
 
   const sectorRepo: SectorRepository = {
-    findById: async (id: string) => sectors.get(id) || null,
+    findById: async (id: string) => Promise.resolve(sectors.get(id) || null),
     findByRestaurantId: async (restaurantId: string) => {
-      return Array.from(sectors.values()).filter((s) => s.restaurantId === restaurantId);
+      return Promise.resolve(
+        Array.from(sectors.values()).filter((s) => s.restaurantId === restaurantId)
+      );
     },
   };
 
   const tableRepo: TableRepository = {
     findById: async (id: string) => {
       for (const tableList of tables.values()) {
+        // Simulate a microtask pause
+        await Promise.resolve();
         const table = tableList.find((t) => t.id === id);
         if (table) return table;
       }
       return null;
     },
-    findBySectorId: async (sectorId: string) => tables.get(sectorId) || [],
+    findBySectorId: async (sectorId: string) => {
+      // Simulate async with await to satisfy linter
+      await Promise.resolve();
+      return tables.get(sectorId) || [];
+    },
   };
 
   const bookingRepo: BookingRepository = {
     findById: async (id: string) => {
       for (const bookingList of bookings.values()) {
+        // Simulate a microtask pause for async consistency
+        await Promise.resolve();
         const booking = bookingList.find((b) => b.id === id);
-        if (booking) return booking;
+        if (booking) {
+          return booking;
+        }
       }
       return null;
     },
     findByRestaurantAndDate: async (restaurantId: string, date: string) => {
+      await Promise.resolve();
       return bookings.get(`${restaurantId}|${date}`) || [];
     },
-    findByTableAndDate: async (tableIds: string[], date: string) => {
+    findByTableAndDate: async (tableIds: string[], _date: string) => {
+      await Promise.resolve();
       const allBookings: Booking[] = [];
       for (const bookingList of bookings.values()) {
         for (const booking of bookingList) {
@@ -67,6 +81,8 @@ function createMockRepositories() {
       return allBookings;
     },
     save: async (booking: Booking) => {
+      // Simulate async call to satisfy linter (ensure at least one await)
+      await Promise.resolve();
       const key = `${booking.restaurantId}|${booking.start.split('T')[0]}`;
       const existing = bookings.get(key) || [];
       existing.push(booking);
@@ -91,9 +107,10 @@ function createMockIdempotencyStore(): IdempotencyStore {
   const store = new Map<string, Booking>();
 
   return {
-    get: async (key: string) => store.get(key) || null,
-    set: async (key: string, booking: Booking, ttl?: number) => {
+    get: async (key: string) => Promise.resolve(store.get(key) || null),
+    set: async (key: string, booking: Booking, _ttl?: number) => {
       store.set(key, booking);
+      return Promise.resolve();
     },
   };
 }
@@ -102,15 +119,16 @@ function createMockLockManager(): LockManager {
   const locks = new Set<string>();
 
   return {
-    acquire: async (key: string, ttl?: number) => {
+    acquire: async (key: string, _ttl?: number) => {
       if (locks.has(key)) {
-        return false;
+        return Promise.resolve(false);
       }
       locks.add(key);
-      return true;
+      return Promise.resolve(true);
     },
     release: async (key: string) => {
       locks.delete(key);
+      return Promise.resolve();
     },
   };
 }

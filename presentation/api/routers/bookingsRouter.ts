@@ -203,7 +203,7 @@ export function createBookingsRouter(
       res.status(201).json(result);
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      baseLog.error('create_booking_error', error, {
+      baseLog.error('create_booking_error', error instanceof Error ? error : undefined, {
         durationMs,
         outcome: 'error',
       });
@@ -310,7 +310,7 @@ export function createBookingsRouter(
       res.status(200).json(result);
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      log.error('list_bookings_error', error, {
+      log.error('list_bookings_error', error instanceof Error ? error : undefined, {
         durationMs,
         outcome: 'error',
       });

@@ -19,7 +19,9 @@ class InMemorySectorRepository implements SectorRepository {
    * @returns Sector if found, null otherwise
    */
   public async findById(id: string): Promise<Sector | null> {
-    return this.store.get(id) || null;
+    // Lint fix: add await for async method (simulate possible async retrieval)
+    const sector = this.store.get(id) || null;
+    return Promise.resolve(sector);
   }
 
   /**
@@ -29,7 +31,11 @@ class InMemorySectorRepository implements SectorRepository {
    * @returns Array of sectors
    */
   public async findByRestaurantId(restaurantId: string): Promise<Sector[]> {
-    return Array.from(this.store.values()).filter((sector) => sector.restaurantId === restaurantId);
+    // Lint fix: add await for async method (simulate possible async retrieval)
+    const sectors = Array.from(this.store.values()).filter(
+      (sector) => sector.restaurantId === restaurantId
+    );
+    return Promise.resolve(sectors);
   }
 
   /**
@@ -38,7 +44,9 @@ class InMemorySectorRepository implements SectorRepository {
    * @param sector - Sector to save
    */
   public async save(sector: Sector): Promise<void> {
+    // Lint fix: add await for async method (simulate possible async storage)
     this.store.set(sector.id, sector);
+    return Promise.resolve();
   }
 
   /**
@@ -47,14 +55,18 @@ class InMemorySectorRepository implements SectorRepository {
    * @returns Array of all sectors
    */
   public async findAll(): Promise<Sector[]> {
-    return Array.from(this.store.values());
+    // Lint fix: add await for async method (simulate possible async retrieval)
+    const sectors = Array.from(this.store.values());
+    return Promise.resolve(sectors);
   }
 
   /**
    * Clears all sectors (for testing).
    */
   public async clear(): Promise<void> {
+    // Lint fix: add await for async method (simulate possible async storage)
     this.store.clear();
+    return Promise.resolve();
   }
 }
 

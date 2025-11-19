@@ -14,6 +14,48 @@ import {
 } from '../../infrastructure/store/repositories';
 import { createApp } from '../../presentation/api/app';
 
+// Type definitions for API responses
+interface DiscoverCandidate {
+  kind: 'single' | 'combo';
+  tableIds: string[];
+  start: string;
+  end: string;
+  score?: number;
+  rationale?: string;
+}
+
+interface DiscoverResponse {
+  slotMinutes: number;
+  durationMinutes: number;
+  candidates: DiscoverCandidate[];
+}
+
+interface BookingResponse {
+  id: string;
+  restaurantId: string;
+  sectorId: string;
+  tableIds: string[];
+  partySize: number;
+  start: string;
+  end: string;
+  durationMinutes: number;
+  status: 'CONFIRMED' | 'CANCELLED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ListBookingsResponse {
+  date: string;
+  items: Array<{
+    id: string;
+    tableIds: string[];
+    partySize: number;
+    start: string;
+    end: string;
+    status: 'CONFIRMED' | 'CANCELLED';
+  }>;
+}
+
 /**
  * Helper function to create test app with fresh repositories
  */
@@ -50,7 +92,7 @@ async function setupTestData(
   restaurantRepo: InMemoryRestaurantRepository,
   sectorRepo: InMemorySectorRepository,
   tableRepo: InMemoryTableRepository,
-  bookingRepo: InMemoryBookingRepository
+  _bookingRepo: InMemoryBookingRepository
 ) {
   // Restaurant
   const restaurant = Restaurant.create({
@@ -140,20 +182,17 @@ describe('API Integration Tests', () => {
         })
         .expect(200);
 
-      expect(response.body).toHaveProperty('slotMinutes', 15);
-      expect(response.body).toHaveProperty('durationMinutes', 90);
-      expect(response.body).toHaveProperty('candidates');
-      expect(Array.isArray(response.body.candidates)).toBe(true);
-      expect(response.body.candidates.length).toBeGreaterThan(0);
+      const body = response.body as DiscoverResponse;
+      expect(body).toHaveProperty('slotMinutes', 15);
+      expect(body).toHaveProperty('durationMinutes', 90);
+      expect(body).toHaveProperty('candidates');
+      expect(Array.isArray(body.candidates)).toBe(true);
+      expect(body.candidates.length).toBeGreaterThan(0);
 
       // Should find T4 (single table that fits 5 people)
-      const singleCandidates = response.body.candidates.filter(
-        (c: { kind: string }) => c.kind === 'single'
-      );
+      const singleCandidates = body.candidates.filter((c) => c.kind === 'single');
       expect(singleCandidates.length).toBeGreaterThan(0);
-      const t4Candidate = singleCandidates.find((c: { tableIds: string[] }) =>
-        c.tableIds.includes('T4')
-      );
+      const t4Candidate = singleCandidates.find((c) => c.tableIds.includes('T4'));
       expect(t4Candidate).toBeDefined();
     });
 
@@ -188,12 +227,11 @@ describe('API Integration Tests', () => {
         })
         .expect(200);
 
-      expect(response.body.candidates.length).toBeGreaterThan(0);
+      const body = response.body as DiscoverResponse;
+      expect(body.candidates.length).toBeGreaterThan(0);
 
       // Should find combo candidates (T2+T3 or similar)
-      const comboCandidates = response.body.candidates.filter(
-        (c: { kind: string }) => c.kind === 'combo'
-      );
+      const comboCandidates = body.candidates.filter((c) => c.kind === 'combo');
       expect(comboCandidates.length).toBeGreaterThan(0);
     });
 
@@ -246,7 +284,8 @@ describe('API Integration Tests', () => {
         .expect(200);
 
       // Should find gaps before 20:00 or after 23:00
-      expect(response.body.candidates.length).toBeGreaterThan(0);
+      const body = response.body as DiscoverResponse;
+      expect(body.candidates.length).toBeGreaterThan(0);
     });
 
     test('Returns 404 when restaurant not found', async () => {
@@ -379,19 +418,20 @@ describe('API Integration Tests', () => {
         })
         .expect(201);
 
-      expect(response.body).toHaveProperty('id');
-      expect(response.body).toHaveProperty('restaurantId', 'R1');
-      expect(response.body).toHaveProperty('sectorId', 'S1');
-      expect(response.body).toHaveProperty('partySize', 5);
-      expect(response.body).toHaveProperty('durationMinutes', 90);
-      expect(response.body).toHaveProperty('status', 'CONFIRMED');
-      expect(response.body).toHaveProperty('tableIds');
-      expect(Array.isArray(response.body.tableIds)).toBe(true);
-      expect(response.body.tableIds.length).toBeGreaterThan(0);
-      expect(response.body).toHaveProperty('start');
-      expect(response.body).toHaveProperty('end');
-      expect(response.body).toHaveProperty('createdAt');
-      expect(response.body).toHaveProperty('updatedAt');
+      const body = response.body as BookingResponse;
+      expect(body).toHaveProperty('id');
+      expect(body).toHaveProperty('restaurantId', 'R1');
+      expect(body).toHaveProperty('sectorId', 'S1');
+      expect(body).toHaveProperty('partySize', 5);
+      expect(body).toHaveProperty('durationMinutes', 90);
+      expect(body).toHaveProperty('status', 'CONFIRMED');
+      expect(body).toHaveProperty('tableIds');
+      expect(Array.isArray(body.tableIds)).toBe(true);
+      expect(body.tableIds.length).toBeGreaterThan(0);
+      expect(body).toHaveProperty('start');
+      expect(body).toHaveProperty('end');
+      expect(body).toHaveProperty('createdAt');
+      expect(body).toHaveProperty('updatedAt');
     });
 
     test('Idempotency: Repeat POST with same payload + Idempotency-Key returns the same booking', async () => {
@@ -413,7 +453,8 @@ describe('API Integration Tests', () => {
         })
         .expect(201);
 
-      const bookingId1 = response1.body.id;
+      const body1 = response1.body as BookingResponse;
+      const bookingId1 = body1.id;
 
       // Second request with same key and payload
       const response2 = await request(app)
@@ -429,10 +470,11 @@ describe('API Integration Tests', () => {
         .expect(201);
 
       // Should return the same booking
-      expect(response2.body.id).toBe(bookingId1);
-      expect(response2.body.start).toBe(response1.body.start);
-      expect(response2.body.end).toBe(response1.body.end);
-      expect(response2.body.tableIds).toEqual(response1.body.tableIds);
+      const body2 = response2.body as BookingResponse;
+      expect(body2.id).toBe(bookingId1);
+      expect(body2.start).toBe(body1.start);
+      expect(body2.end).toBe(body1.end);
+      expect(body2.tableIds).toEqual(body1.tableIds);
     });
 
     test('Concurrency: Two parallel creates targeting the same candidate → one 201, one 409', async () => {
@@ -592,14 +634,15 @@ describe('API Integration Tests', () => {
         })
         .expect(200);
 
-      expect(response.body).toHaveProperty('date', '2025-10-22');
-      expect(response.body).toHaveProperty('items');
-      expect(Array.isArray(response.body.items)).toBe(true);
-      expect(response.body.items.length).toBe(1);
-      expect(response.body.items[0]).toHaveProperty('id', 'B1');
-      expect(response.body.items[0]).toHaveProperty('tableIds', ['T4']);
-      expect(response.body.items[0]).toHaveProperty('partySize', 5);
-      expect(response.body.items[0]).toHaveProperty('status', 'CONFIRMED');
+      const body = response.body as ListBookingsResponse;
+      expect(body).toHaveProperty('date', '2025-10-22');
+      expect(body).toHaveProperty('items');
+      expect(Array.isArray(body.items)).toBe(true);
+      expect(body.items.length).toBe(1);
+      expect(body.items[0]).toHaveProperty('id', 'B1');
+      expect(body.items[0]).toHaveProperty('tableIds', ['T4']);
+      expect(body.items[0]).toHaveProperty('partySize', 5);
+      expect(body.items[0]).toHaveProperty('status', 'CONFIRMED');
     });
 
     test('Returns empty array when no bookings exist', async () => {
@@ -614,10 +657,11 @@ describe('API Integration Tests', () => {
         })
         .expect(200);
 
-      expect(response.body).toHaveProperty('date', '2025-10-22');
-      expect(response.body).toHaveProperty('items');
-      expect(Array.isArray(response.body.items)).toBe(true);
-      expect(response.body.items.length).toBe(0);
+      const body = response.body as ListBookingsResponse;
+      expect(body).toHaveProperty('date', '2025-10-22');
+      expect(body).toHaveProperty('items');
+      expect(Array.isArray(body.items)).toBe(true);
+      expect(body.items.length).toBe(0);
     });
 
     test('Returns 400 when restaurantId is missing', async () => {

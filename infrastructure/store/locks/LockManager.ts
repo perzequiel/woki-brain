@@ -35,7 +35,7 @@ class InMemoryLockManager implements LockManager {
 
     // Check if lock already exists
     if (this.locks.has(key)) {
-      return false; // Already locked
+      return Promise.resolve(false); // Already locked
     }
 
     // Acquire lock
@@ -51,7 +51,7 @@ class InMemoryLockManager implements LockManager {
 
     this.locks.set(key, entry);
 
-    return true;
+    return Promise.resolve(true);
   }
 
   /**
@@ -68,6 +68,7 @@ class InMemoryLockManager implements LockManager {
       }
       this.locks.delete(key);
     }
+    return Promise.resolve();
   }
 
   /**
@@ -110,6 +111,7 @@ class InMemoryLockManager implements LockManager {
       }
     }
     this.locks.clear();
+    return Promise.resolve();
   }
 }
 

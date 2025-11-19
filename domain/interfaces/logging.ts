@@ -13,7 +13,11 @@
 export interface BoundLogger {
   info(message: string, context?: Record<string, unknown>): void;
   warn(message: string, context?: Record<string, unknown>): void;
-  error(message: string, error?: Error | unknown, context?: Record<string, unknown>): void;
+  error(
+    message: string,
+    error?: Error | Record<string, unknown>,
+    context?: Record<string, unknown>
+  ): void;
   debug(message: string, context?: Record<string, unknown>): void;
 }
 

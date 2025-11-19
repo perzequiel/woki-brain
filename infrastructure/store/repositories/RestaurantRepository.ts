@@ -19,7 +19,8 @@ class InMemoryRestaurantRepository implements RestaurantRepository {
    * @returns Restaurant if found, null otherwise
    */
   public async findById(id: string): Promise<Restaurant | null> {
-    return this.store.get(id) || null;
+    const restaurant = this.store.get(id) || null;
+    return Promise.resolve(restaurant);
   }
 
   /**
@@ -29,6 +30,7 @@ class InMemoryRestaurantRepository implements RestaurantRepository {
    */
   public async save(restaurant: Restaurant): Promise<void> {
     this.store.set(restaurant.id, restaurant);
+    return Promise.resolve();
   }
 
   /**
@@ -37,7 +39,8 @@ class InMemoryRestaurantRepository implements RestaurantRepository {
    * @returns Array of all restaurants
    */
   public async findAll(): Promise<Restaurant[]> {
-    return Array.from(this.store.values());
+    const restaurants = Array.from(this.store.values());
+    return Promise.resolve(restaurants);
   }
 
   /**
@@ -45,6 +48,7 @@ class InMemoryRestaurantRepository implements RestaurantRepository {
    */
   public async clear(): Promise<void> {
     this.store.clear();
+    return Promise.resolve();
   }
 }
 

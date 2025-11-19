@@ -20,7 +20,11 @@ class PinoBoundLogger implements BoundLogger {
     this.logger.warn(context || {}, message);
   }
 
-  public error(message: string, error?: Error | unknown, context?: Record<string, unknown>): void {
+  public error(
+    message: string,
+    error?: Error | Record<string, unknown>,
+    context?: Record<string, unknown>
+  ): void {
     const errorContext: Record<string, unknown> = { ...context };
 
     if (error instanceof Error) {

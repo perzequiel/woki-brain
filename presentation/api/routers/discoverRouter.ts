@@ -305,7 +305,7 @@ export function createDiscoverRouter(
       res.status(200).json(result);
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      log.error('discover_error', error, {
+      log.error('discover_error', error as Error, {
         durationMs,
         outcome: 'error',
       });

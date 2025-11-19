@@ -19,7 +19,7 @@ class InMemoryBookingRepository implements BookingRepository {
    * @returns Booking if found, null otherwise
    */
   public async findById(id: string): Promise<Booking | null> {
-    return this.store.get(id) || null;
+    return Promise.resolve(this.store.get(id) || null);
   }
 
   /**
@@ -31,15 +31,17 @@ class InMemoryBookingRepository implements BookingRepository {
    * @returns Array of bookings for that restaurant on that date
    */
   public async findByRestaurantAndDate(restaurantId: string, date: string): Promise<Booking[]> {
-    return Array.from(this.store.values()).filter((booking) => {
-      if (booking.restaurantId !== restaurantId) {
-        return false;
-      }
+    return Promise.resolve(
+      Array.from(this.store.values()).filter((booking) => {
+        if (booking.restaurantId !== restaurantId) {
+          return false;
+        }
 
-      // Extract date from ISO8601 string (YYYY-MM-DD)
-      const bookingDate = booking.start.split('T')[0];
-      return bookingDate === date;
-    });
+        // Extract date from ISO8601 string (YYYY-MM-DD)
+        const bookingDate = booking.start.split('T')[0];
+        return bookingDate === date;
+      })
+    );
   }
 
   /**
@@ -51,16 +53,18 @@ class InMemoryBookingRepository implements BookingRepository {
    * @returns Array of bookings that use any of the specified tables on that date
    */
   public async findByTableAndDate(tableIds: string[], date: string): Promise<Booking[]> {
-    return Array.from(this.store.values()).filter((booking) => {
-      // Extract date from ISO8601 string
-      const bookingDate = booking.start.split('T')[0];
-      if (bookingDate !== date) {
-        return false;
-      }
+    return Promise.resolve(
+      Array.from(this.store.values()).filter((booking) => {
+        // Extract date from ISO8601 string
+        const bookingDate = booking.start.split('T')[0];
+        if (bookingDate !== date) {
+          return false;
+        }
 
-      // Check if booking uses any of the specified tables
-      return booking.tableIds.some((id) => tableIds.includes(id));
-    });
+        // Check if booking uses any of the specified tables
+        return booking.tableIds.some((id) => tableIds.includes(id));
+      })
+    );
   }
 
   /**
@@ -71,7 +75,7 @@ class InMemoryBookingRepository implements BookingRepository {
    */
   public async save(booking: Booking): Promise<Booking> {
     this.store.set(booking.id, booking);
-    return booking;
+    return Promise.resolve(booking);
   }
 
   /**
@@ -80,7 +84,7 @@ class InMemoryBookingRepository implements BookingRepository {
    * @returns Array of all bookings
    */
   public async findAll(): Promise<Booking[]> {
-    return Array.from(this.store.values());
+    return Promise.resolve(Array.from(this.store.values()));
   }
 
   /**
@@ -88,6 +92,7 @@ class InMemoryBookingRepository implements BookingRepository {
    */
   public async clear(): Promise<void> {
     this.store.clear();
+    return Promise.resolve();
   }
 }
 

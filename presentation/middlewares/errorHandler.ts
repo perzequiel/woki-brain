@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { ZodError } from 'zod';
 
 /**
@@ -12,15 +12,15 @@ export interface ErrorResponse {
 /**
  * Maps application errors to HTTP status codes and error responses
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction): void {
+
+export function errorHandler(err: unknown, _req: Request, res: Response): void {
   // Zod validation errors
   if (err instanceof ZodError) {
-    const firstError = err.issues[0];
+    const firstIssue = err.issues[0];
     res.status(400).json({
       error: 'invalid_input',
-      detail: firstError?.message || 'Invalid input parameters',
-    } as ErrorResponse);
+      detail: firstIssue?.message || 'Invalid input parameters',
+    });
     return;
   }
 

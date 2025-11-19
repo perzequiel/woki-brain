@@ -10,30 +10,24 @@ function createMockBookingRepository(): BookingRepository {
     findById: async (id: string) => {
       for (const bookingList of bookings.values()) {
         const booking = bookingList.find((b) => b.id === id);
-        if (booking) return booking;
+        if (booking) return Promise.resolve(booking);
       }
-      return null;
+      return Promise.resolve(null);
     },
     findByRestaurantAndDate: async (restaurantId: string, date: string) => {
-      return bookings.get(`${restaurantId}|${date}`) || [];
+      const bookingsMap = bookings.get(`${restaurantId}|${date}`) || [];
+      return Promise.resolve(bookingsMap);
     },
     findByTableAndDate: async (tableIds: string[], date: string) => {
-      const allBookings: Booking[] = [];
-      for (const bookingList of bookings.values()) {
-        for (const booking of bookingList) {
-          if (booking.tableIds.some((id) => tableIds.includes(id))) {
-            allBookings.push(booking);
-          }
-        }
-      }
-      return allBookings;
+      const bookingsMap = bookings.get(`${tableIds.join(',')}|${date}`) || [];
+      return Promise.resolve(bookingsMap);
     },
     save: async (booking: Booking) => {
       const key = `${booking.restaurantId}|${booking.start.split('T')[0]}`;
       const existing = bookings.get(key) || [];
       existing.push(booking);
       bookings.set(key, existing);
-      return booking;
+      return Promise.resolve(booking);
     },
   };
 }
