@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import Booking from '../../domain/entities/booking';
 import Table from '../../domain/entities/table';
 import { findComboGaps } from '../../domain/services/combo_intersection';
+import { timeStringToDate } from '../../domain/services/time';
 
 function createTable(id: string, minSize: number, maxSize: number): Table {
   return Table.create({
@@ -66,8 +67,9 @@ describe('Combo Intersection Service', () => {
     test('Returns empty when one table has no gaps', () => {
       const tables = [createTable('T1', 2, 4), createTable('T2', 2, 4)];
       const bookings = [
-        // T1 is booked all day
-        createBooking('B1', ['T1'], '2025-10-22T00:00:00-03:00', '2025-10-22T23:59:00-03:00'),
+        // T1 is booked all day - need to cover the entire day including end
+        // The day ends at 23:59:59, so we need to book until 23:59:59 or later
+        createBooking('B1', ['T1'], '2025-10-22T00:00:00-03:00', '2025-10-23T00:00:00-03:00'),
       ];
 
       const comboGaps = findComboGaps(
@@ -191,7 +193,8 @@ describe('Combo Intersection Service', () => {
       );
 
       // All gaps should be within service window
-      const windowStart = new Date('2025-10-22T20:00:00-03:00');
+      // Use timeStringToDate to match how the service creates dates
+      const windowStart = timeStringToDate('2025-10-22', '20:00');
       comboGaps.forEach((gap) => {
         // Use timestamp comparison to avoid timezone issues
         expect(gap.start.getTime()).toBeGreaterThanOrEqual(windowStart.getTime());

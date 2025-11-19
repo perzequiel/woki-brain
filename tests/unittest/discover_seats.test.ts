@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import DiscoverSeatsUseCase from '../../application/use_cases/discover_seats';
 import Booking from '../../domain/entities/booking';
 import Table from '../../domain/entities/table';
+import { timeStringToDate } from '../../domain/services/time';
 
 function createTable(id: string, minSize: number, maxSize: number): Table {
   return Table.create({
@@ -178,7 +179,8 @@ describe('Discover Seats Use Case - Integrated', () => {
       });
 
       // All candidates should be within service window
-      const windowStart = new Date('2025-10-22T20:00:00-03:00');
+      // Use timeStringToDate to match how the service creates dates
+      const windowStart = timeStringToDate('2025-10-22', '20:00');
       result.candidates.forEach((candidate) => {
         const startDate = new Date(candidate.start);
         // Use timestamp comparison to avoid timezone issues
@@ -328,9 +330,9 @@ describe('Discover Seats Use Case - Integrated', () => {
       // Should only use service windows that overlap with requested window
       // The filtered service window should be 20:00-22:00
       expect(result.candidates.length).toBeGreaterThan(0);
-      // Use timestamp comparison to avoid timezone issues
-      const windowStart = new Date('2025-10-22T20:00:00-03:00');
-      const windowEnd = new Date('2025-10-22T22:00:00-03:00');
+      // Use timeStringToDate to match how the service creates dates
+      const windowStart = timeStringToDate('2025-10-22', '20:00');
+      const windowEnd = timeStringToDate('2025-10-22', '22:00');
       result.candidates.forEach((candidate) => {
         const startDate = new Date(candidate.start);
         const endDate = new Date(candidate.end);
@@ -411,8 +413,10 @@ describe('Discover Seats Use Case - Integrated', () => {
     test('Handles all tables booked for entire day', () => {
       const tables = [createTable('T1', 2, 4), createTable('T2', 2, 4)];
       const bookings = [
-        createBooking('B1', ['T1'], '2025-10-22T00:00:00-03:00', '2025-10-22T23:59:00-03:00'),
-        createBooking('B2', ['T2'], '2025-10-22T00:00:00-03:00', '2025-10-22T23:59:00-03:00'),
+        // Book all day - need to cover the entire day including end
+        // The day ends at 23:59:59, so we need to book until 23:59:59 or later
+        createBooking('B1', ['T1'], '2025-10-22T00:00:00-03:00', '2025-10-23T00:00:00-03:00'),
+        createBooking('B2', ['T2'], '2025-10-22T00:00:00-03:00', '2025-10-23T00:00:00-03:00'),
       ];
 
       const result = useCase.execute({
