@@ -293,7 +293,7 @@ describe('Discover Seats Use Case - Integrated', () => {
       // This test verifies that the filtering logic is applied
       // If candidates exist, they should respect service windows that overlap with the requested window
       expect(result.candidates.length).toBeGreaterThanOrEqual(0);
-      
+
       // If candidates are found, verify they are valid
       if (result.candidates.length > 0) {
         result.candidates.forEach((candidate) => {
@@ -325,22 +325,35 @@ describe('Discover Seats Use Case - Integrated', () => {
       });
 
       // Should only use service windows that overlap with requested window
+      // The filtered service window should be 20:00-22:00
+      expect(result.candidates.length).toBeGreaterThan(0);
       result.candidates.forEach((candidate) => {
         const startDate = new Date(candidate.start);
-        const hour = startDate.getHours();
-        expect(hour).toBeGreaterThanOrEqual(20);
-        expect(hour).toBeLessThan(22);
+        const endDate = new Date(candidate.end);
+
+        // Convert to Argentina timezone (-03:00)
+        // ISO string is in UTC, so we need to adjust
+        // For Argentina timezone, subtract 3 hours from UTC
+        const startHourArgentina = startDate.getUTCHours() - 3;
+        const endHourArgentina = endDate.getUTCHours() - 3;
+
+        // Adjust for day rollover (if negative, add 24)
+        const adjustedStartHour =
+          startHourArgentina < 0 ? startHourArgentina + 24 : startHourArgentina;
+        const adjustedEndHour = endHourArgentina < 0 ? endHourArgentina + 24 : endHourArgentina;
+
+        // Candidate should start at or after 20:00 and end at or before 22:00
+        // (in Argentina timezone)
+        expect(adjustedStartHour).toBeGreaterThanOrEqual(20);
+        expect(adjustedStartHour).toBeLessThan(22);
+        expect(adjustedEndHour).toBeLessThanOrEqual(22);
       });
     });
   });
 
   describe('Combo Discovery', () => {
     test('Finds combos when single tables are booked', () => {
-      const tables = [
-        createTable('T1', 2, 4),
-        createTable('T2', 2, 4),
-        createTable('T3', 2, 4),
-      ];
+      const tables = [createTable('T1', 2, 4), createTable('T2', 2, 4), createTable('T3', 2, 4)];
       const bookings = [
         // Book all single tables at 20:00
         createBooking('B1', ['T1'], '2025-10-22T20:00:00-03:00', '2025-10-22T22:00:00-03:00'),
@@ -623,17 +636,12 @@ describe('Discover Seats Use Case - Integrated', () => {
         const bookingEnd = new Date('2025-10-22T21:00:00-03:00');
 
         // Gap should not overlap with booking (end exclusive)
-        expect(
-          endDate <= bookingStart || startDate >= bookingEnd
-        ).toBe(true);
+        expect(endDate <= bookingStart || startDate >= bookingEnd).toBe(true);
       });
     });
 
     test('Complete flow: combo when singles are booked', () => {
-      const tables = [
-        createTable('T1', 2, 4),
-        createTable('T2', 2, 4),
-      ];
+      const tables = [createTable('T1', 2, 4), createTable('T2', 2, 4)];
       const bookings = [
         createBooking('B1', ['T1'], '2025-10-22T20:00:00-03:00', '2025-10-22T22:00:00-03:00'),
         createBooking('B2', ['T2'], '2025-10-22T20:00:00-03:00', '2025-10-22T22:00:00-03:00'),

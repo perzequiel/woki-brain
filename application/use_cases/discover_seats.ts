@@ -243,8 +243,8 @@ class DiscoverSeatsUseCase {
 
   /**
    * Applies time window filter to service windows.
-   * If windowStart/windowEnd are provided, filters service windows to only include
-   * those that overlap with the requested window.
+   * If windowStart/windowEnd are provided, filters and clips service windows to only include
+   * the portion that overlaps with the requested window.
    */
   private applyTimeWindow(
     serviceWindows: Array<{ start: string; end: string }> | undefined,
@@ -255,16 +255,24 @@ class DiscoverSeatsUseCase {
       return serviceWindows;
     }
 
-    // Filter service windows that overlap with requested window
-    return serviceWindows.filter((window) => {
-      if (windowStart && window.end <= windowStart) {
-        return false; // Service window ends before requested start
-      }
-      if (windowEnd && window.start >= windowEnd) {
-        return false; // Service window starts after requested end
-      }
-      return true; // Overlaps
-    });
+    // Filter and clip service windows to requested window
+    return serviceWindows
+      .filter((window) => {
+        // Check if window overlaps with requested window
+        if (windowStart && window.end <= windowStart) {
+          return false; // Service window ends before requested start
+        }
+        if (windowEnd && window.start >= windowEnd) {
+          return false; // Service window starts after requested end
+        }
+        return true; // Overlaps
+      })
+      .map((window) => {
+        // Clip window to requested bounds
+        const clippedStart = windowStart && window.start < windowStart ? windowStart : window.start;
+        const clippedEnd = windowEnd && window.end > windowEnd ? windowEnd : window.end;
+        return { start: clippedStart, end: clippedEnd };
+      });
   }
 
   /**
