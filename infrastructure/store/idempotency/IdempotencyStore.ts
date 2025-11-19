@@ -78,7 +78,8 @@ class InMemoryIdempotencyStore implements IdempotencyStore {
    */
   private cleanExpiredEntries(): void {
     const now = new Date();
-    for (const [key, entry] of this.store.entries()) {
+    const entries = Array.from(this.store.entries());
+    for (const [key, entry] of entries) {
       if (entry.expiresAt < now) {
         // Entry expired, remove it
         if (entry.timeoutId) {
@@ -103,7 +104,8 @@ class InMemoryIdempotencyStore implements IdempotencyStore {
    * Clears all entries (for testing).
    */
   public async clear(): Promise<void> {
-    for (const entry of this.store.values()) {
+    const entries = Array.from(this.store.values());
+    for (const entry of entries) {
       if (entry.timeoutId) {
         clearTimeout(entry.timeoutId);
       }

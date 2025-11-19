@@ -76,7 +76,8 @@ class InMemoryLockManager implements LockManager {
    */
   private cleanExpiredLocks(): void {
     const now = Date.now();
-    for (const [key, entry] of this.locks.entries()) {
+    const entries = Array.from(this.locks.entries());
+    for (const [key, entry] of entries) {
       const age = now - entry.acquiredAt.getTime();
       if (age > entry.ttl) {
         // Lock expired, remove it
@@ -102,7 +103,8 @@ class InMemoryLockManager implements LockManager {
    * Clears all locks (for testing).
    */
   public async clear(): Promise<void> {
-    for (const entry of this.locks.values()) {
+    const entries = Array.from(this.locks.values());
+    for (const entry of entries) {
       if (entry.timeoutId) {
         clearTimeout(entry.timeoutId);
       }

@@ -61,14 +61,24 @@ class GapDiscoveryService {
     const dayEnd = this.getDayEnd(date, timezone);
 
     // Step 4: Find gaps (aligned to 15-minute grid)
-    // If no bookings, the whole day is available
+    // If no bookings, create gaps from service windows (or whole day if no windows)
     if (sortedBookings.length === 0) {
-      const fullDayGap = this.createGapAligned(dayStart, dayEnd);
-      let gaps = this.filterByDuration([fullDayGap], durationMinutes);
       if (serviceWindows && serviceWindows.length > 0) {
-        gaps = this.filterByServiceWindows(gaps, serviceWindows, date, timezone);
+        // Create gaps from service windows
+        const gaps: TimeGap[] = [];
+        for (const window of serviceWindows) {
+          const windowStart = timeStringToDate(date, window.start);
+          const windowEnd = timeStringToDate(date, window.end);
+          const alignedStart = alignToGrid(windowStart);
+          const alignedEnd = alignToGrid(windowEnd);
+          gaps.push(this.createGapAligned(alignedStart, alignedEnd));
+        }
+        return this.filterByDuration(gaps, durationMinutes);
+      } else {
+        // No service windows, whole day is available
+        const fullDayGap = this.createGapAligned(dayStart, dayEnd);
+        return this.filterByDuration([fullDayGap], durationMinutes);
       }
-      return gaps;
     }
 
     // Find gaps between bookings
