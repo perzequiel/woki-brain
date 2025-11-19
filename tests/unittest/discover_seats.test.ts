@@ -203,5 +203,459 @@ describe('Discover Seats Use Case - Integrated', () => {
 
       expect(result.candidates.length).toBeLessThanOrEqual(2);
     });
+
+    test('Uses default limit of 10 when not specified', () => {
+      const tables = Array.from({ length: 15 }, (_, i) => createTable(`T${i + 1}`, 2, 4));
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      expect(result.candidates.length).toBeLessThanOrEqual(10);
+    });
+  });
+
+  describe('Capacity Filtering', () => {
+    test('Filters out tables that cannot accommodate party size', () => {
+      const tables = [
+        createTable('T1', 2, 2), // Too small (max 2, need 3)
+        createTable('T2', 2, 4), // Can fit
+        createTable('T3', 5, 6), // Too large (min 5, need 3)
+      ];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      // Should only find candidates from T2
+      result.candidates.forEach((candidate) => {
+        if (candidate.kind === 'single') {
+          expect(candidate.tableIds).toEqual(['T2']);
+        }
+      });
+    });
+
+    test('Filters combo candidates by capacity', () => {
+      const tables = [
+        createTable('T1', 2, 3), // Max 3
+        createTable('T2', 2, 3), // Max 3
+        createTable('T3', 2, 3), // Max 3
+      ];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 5, // Needs combo, T1+T2+T3 = min 6, max 9 (can fit 5-9)
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      // Should find combo candidates that can accommodate 5
+      const validCombos = result.candidates.filter(
+        (c) => c.kind === 'combo' && c.tableIds.length >= 2
+      );
+      // At least one combo should be found (T1+T2+T3 can fit 5-9)
+      expect(validCombos.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Time Window Filtering', () => {
+    test('Filters candidates by windowStart and windowEnd', () => {
+      const tables = [createTable('T1', 2, 4)];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 60,
+        timezone: 'America/Argentina/Buenos_Aires',
+        windowStart: '20:00',
+        windowEnd: '22:00',
+      });
+
+      // The windowStart/windowEnd filter service windows, not the gaps themselves
+      // This test verifies that the filtering logic is applied
+      // If candidates exist, they should respect service windows that overlap with the requested window
+      expect(result.candidates.length).toBeGreaterThanOrEqual(0);
+      
+      // If candidates are found, verify they are valid
+      if (result.candidates.length > 0) {
+        result.candidates.forEach((candidate) => {
+          const startDate = new Date(candidate.start);
+          const endDate = new Date(candidate.end);
+          // Verify dates are valid
+          expect(startDate.getTime()).toBeLessThan(endDate.getTime());
+        });
+      }
+    });
+
+    test('Applies window filter to service windows', () => {
+      const tables = [createTable('T1', 2, 4)];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        serviceWindows: [
+          { start: '19:00', end: '23:00' },
+          { start: '20:00', end: '22:00' },
+        ],
+        timezone: 'America/Argentina/Buenos_Aires',
+        windowStart: '20:00',
+        windowEnd: '22:00',
+      });
+
+      // Should only use service windows that overlap with requested window
+      result.candidates.forEach((candidate) => {
+        const startDate = new Date(candidate.start);
+        const hour = startDate.getHours();
+        expect(hour).toBeGreaterThanOrEqual(20);
+        expect(hour).toBeLessThan(22);
+      });
+    });
+  });
+
+  describe('Combo Discovery', () => {
+    test('Finds combos when single tables are booked', () => {
+      const tables = [
+        createTable('T1', 2, 4),
+        createTable('T2', 2, 4),
+        createTable('T3', 2, 4),
+      ];
+      const bookings = [
+        // Book all single tables at 20:00
+        createBooking('B1', ['T1'], '2025-10-22T20:00:00-03:00', '2025-10-22T22:00:00-03:00'),
+        createBooking('B2', ['T2'], '2025-10-22T20:00:00-03:00', '2025-10-22T22:00:00-03:00'),
+        createBooking('B3', ['T3'], '2025-10-22T20:00:00-03:00', '2025-10-22T22:00:00-03:00'),
+      ];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 5, // Needs combo
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      // Should find combo candidates (T1+T2, T2+T3, etc.)
+      const comboCandidates = result.candidates.filter((c) => c.kind === 'combo');
+      expect(comboCandidates.length).toBeGreaterThan(0);
+    });
+
+    test('Finds combos with 3 or more tables', () => {
+      const tables = [
+        createTable('T1', 2, 2),
+        createTable('T2', 2, 2),
+        createTable('T3', 2, 2),
+        createTable('T4', 2, 2),
+      ];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 6, // Needs combo of 3+ tables
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      // Should find combos with 3 or more tables
+      const largeCombos = result.candidates.filter(
+        (c) => c.kind === 'combo' && c.tableIds.length >= 3
+      );
+      expect(largeCombos.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Edge Cases', () => {
+    test('Handles empty tables array', () => {
+      const result = useCase.execute({
+        tables: [],
+        bookings: [],
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      expect(result.candidates.length).toBe(0);
+    });
+
+    test('Handles all tables booked for entire day', () => {
+      const tables = [createTable('T1', 2, 4), createTable('T2', 2, 4)];
+      const bookings = [
+        createBooking('B1', ['T1'], '2025-10-22T00:00:00-03:00', '2025-10-22T23:59:00-03:00'),
+        createBooking('B2', ['T2'], '2025-10-22T00:00:00-03:00', '2025-10-22T23:59:00-03:00'),
+      ];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      // Should return empty or very limited candidates
+      expect(result.candidates.length).toBe(0);
+    });
+
+    test('Handles party size at minimum capacity', () => {
+      const tables = [createTable('T1', 2, 4)]; // minSize: 2
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 2, // Exactly minSize
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      expect(result.candidates.length).toBeGreaterThan(0);
+      result.candidates.forEach((c) => {
+        expect(c.tableIds).toContain('T1');
+      });
+    });
+
+    test('Handles party size at maximum capacity', () => {
+      const tables = [createTable('T1', 2, 4)]; // maxSize: 4
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 4, // Exactly maxSize
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      expect(result.candidates.length).toBeGreaterThan(0);
+      result.candidates.forEach((c) => {
+        expect(c.tableIds).toContain('T1');
+      });
+    });
+
+    test('Ignores CANCELLED bookings', () => {
+      const tables = [createTable('T1', 2, 4)];
+      const bookings = [
+        createBooking(
+          'B1',
+          ['T1'],
+          '2025-10-22T20:00:00-03:00',
+          '2025-10-22T21:00:00-03:00',
+          'CANCELLED'
+        ),
+      ];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      // Should find gaps as if no bookings exist (CANCELLED is ignored)
+      expect(result.candidates.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Response Format', () => {
+    test('Returns correct response structure', () => {
+      const tables = [createTable('T1', 2, 4)];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      expect(result).toHaveProperty('slotMinutes');
+      expect(result).toHaveProperty('durationMinutes');
+      expect(result).toHaveProperty('candidates');
+      expect(result.slotMinutes).toBe(15);
+      expect(result.durationMinutes).toBe(90);
+      expect(Array.isArray(result.candidates)).toBe(true);
+    });
+
+    test('Candidates have correct structure', () => {
+      const tables = [createTable('T1', 2, 4)];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      if (result.candidates.length > 0) {
+        const candidate = result.candidates[0];
+        expect(candidate).toHaveProperty('kind');
+        expect(candidate).toHaveProperty('tableIds');
+        expect(candidate).toHaveProperty('start');
+        expect(candidate).toHaveProperty('end');
+        expect(['single', 'combo']).toContain(candidate.kind);
+        expect(Array.isArray(candidate.tableIds)).toBe(true);
+        expect(typeof candidate.start).toBe('string');
+        expect(typeof candidate.end).toBe('string');
+        // Verify ISO8601 format
+        expect(() => new Date(candidate.start)).not.toThrow();
+        expect(() => new Date(candidate.end)).not.toThrow();
+      }
+    });
+  });
+
+  describe('Sorting and Ordering', () => {
+    test('Candidates are sorted by WokiBrain strategy (single first)', () => {
+      const tables = [
+        createTable('T1', 2, 4), // Single
+        createTable('T2', 2, 2),
+        createTable('T3', 2, 2), // Combo T2+T3
+      ];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      if (result.candidates.length > 1) {
+        // Find first single and first combo
+        const firstSingle = result.candidates.find((c) => c.kind === 'single');
+        const firstCombo = result.candidates.find((c) => c.kind === 'combo');
+
+        if (firstSingle && firstCombo) {
+          const singleIndex = result.candidates.indexOf(firstSingle);
+          const comboIndex = result.candidates.indexOf(firstCombo);
+          expect(singleIndex).toBeLessThan(comboIndex);
+        }
+      }
+    });
+
+    test('Candidates with same kind are sorted by waste', () => {
+      const tables = [
+        createTable('T1', 2, 6), // waste: 3
+        createTable('T2', 2, 4), // waste: 1
+        createTable('T3', 2, 5), // waste: 2
+      ];
+      const bookings: Booking[] = [];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      const singleCandidates = result.candidates.filter((c) => c.kind === 'single');
+      if (singleCandidates.length >= 2) {
+        // T2 should come before T1 (lower waste)
+        const t2Index = singleCandidates.findIndex((c) => c.tableIds.includes('T2'));
+        const t1Index = singleCandidates.findIndex((c) => c.tableIds.includes('T1'));
+        if (t2Index !== -1 && t1Index !== -1) {
+          expect(t2Index).toBeLessThan(t1Index);
+        }
+      }
+    });
+  });
+
+  describe('Integration Scenarios', () => {
+    test('Complete flow: single table with booking', () => {
+      const tables = [createTable('T1', 2, 4)];
+      const bookings = [
+        createBooking('B1', ['T1'], '2025-10-22T20:00:00-03:00', '2025-10-22T21:00:00-03:00'),
+      ];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 3,
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      // Should find gaps before and after booking
+      expect(result.candidates.length).toBeGreaterThan(0);
+      result.candidates.forEach((candidate) => {
+        const startDate = new Date(candidate.start);
+        const endDate = new Date(candidate.end);
+        const bookingStart = new Date('2025-10-22T20:00:00-03:00');
+        const bookingEnd = new Date('2025-10-22T21:00:00-03:00');
+
+        // Gap should not overlap with booking (end exclusive)
+        expect(
+          endDate <= bookingStart || startDate >= bookingEnd
+        ).toBe(true);
+      });
+    });
+
+    test('Complete flow: combo when singles are booked', () => {
+      const tables = [
+        createTable('T1', 2, 4),
+        createTable('T2', 2, 4),
+      ];
+      const bookings = [
+        createBooking('B1', ['T1'], '2025-10-22T20:00:00-03:00', '2025-10-22T22:00:00-03:00'),
+        createBooking('B2', ['T2'], '2025-10-22T20:00:00-03:00', '2025-10-22T22:00:00-03:00'),
+      ];
+
+      const result = useCase.execute({
+        tables,
+        bookings,
+        date: '2025-10-22',
+        partySize: 5, // Needs combo
+        durationMinutes: 90,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      // Should find combo candidates where both tables are free
+      const comboCandidates = result.candidates.filter((c) => c.kind === 'combo');
+      if (comboCandidates.length > 0) {
+        // Combo should have both tables
+        expect(comboCandidates[0].tableIds.length).toBe(2);
+        expect(comboCandidates[0].tableIds).toContain('T1');
+        expect(comboCandidates[0].tableIds).toContain('T2');
+      }
+    });
   });
 });

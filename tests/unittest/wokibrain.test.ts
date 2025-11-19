@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import WokiBrainService, { Candidate } from '../../domain/services/wokibrain';
-import CandidateBuilder from '../../domain/services/candidate_builder';
 import Table from '../../domain/entities/table';
+import CandidateBuilder from '../../domain/services/candidate_builder';
 import { TimeGap } from '../../domain/services/gap_discovery';
+import WokiBrainService, { Candidate } from '../../domain/services/wokibrain';
 
 function createTable(id: string, minSize: number, maxSize: number): Table {
   return Table.create({
@@ -17,7 +17,11 @@ function createTable(id: string, minSize: number, maxSize: number): Table {
 }
 
 function createTimeGap(startHour: number, startMin: number, durationMinutes: number): TimeGap {
-  const start = new Date(`2025-10-22T${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}:00-03:00`);
+  const start = new Date(
+    `2025-10-22T${startHour.toString().padStart(2, '0')}:${startMin
+      .toString()
+      .padStart(2, '0')}:00-03:00`
+  );
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
   return {
     start,
@@ -273,4 +277,3 @@ describe('WokiBrain Selection Service', () => {
     });
   });
 });
-
