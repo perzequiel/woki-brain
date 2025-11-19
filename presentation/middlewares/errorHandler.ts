@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
 /**
@@ -12,8 +12,12 @@ export interface ErrorResponse {
 /**
  * Maps application errors to HTTP status codes and error responses
  */
-
-export function errorHandler(err: unknown, _req: Request, res: Response): void {
+export function errorHandler(
+  err: unknown,
+  _req: Request,
+  res: Response,
+  _next: NextFunction
+): void {
   // Zod validation errors
   if (err instanceof ZodError) {
     const firstIssue = err.issues[0];
