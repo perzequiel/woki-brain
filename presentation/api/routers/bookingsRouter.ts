@@ -3,6 +3,7 @@ import CreateBookingUseCase from '../../../application/use_cases/create_booking'
 import ListBookingsUseCase from '../../../application/use_cases/list_bookings';
 import { IdempotencyStore } from '../../../domain/interfaces/idempotency';
 import { LockManager } from '../../../domain/interfaces/locks';
+import { LoggingPort } from '../../../domain/interfaces/logging';
 import {
   BookingRepository,
   RestaurantRepository,
@@ -20,6 +21,7 @@ import { CreateBookingBodySchema, ListBookingsQuerySchema } from '../schemas';
  * @param bookingRepo - Booking repository
  * @param idempotencyStore - Idempotency store
  * @param lockManager - Lock manager
+ * @param loggingPort - Optional logging port for structured logging
  * @returns Express router
  */
 export function createBookingsRouter(
@@ -28,7 +30,8 @@ export function createBookingsRouter(
   tableRepo: TableRepository,
   bookingRepo: BookingRepository,
   idempotencyStore: IdempotencyStore,
-  lockManager: LockManager
+  lockManager: LockManager,
+  loggingPort?: LoggingPort
 ): Router {
   const router = Router();
   const createBookingUseCase = new CreateBookingUseCase(
@@ -127,33 +130,87 @@ export function createBookingsRouter(
    *               detail: Window does not intersect service hours
    */
   router.post('/woki/bookings', async (req: Request, res: Response) => {
-    // Validate request body
-    const body = CreateBookingBodySchema.parse(req.body);
+    const startTime = Date.now();
+    const requestId = (req as Request & { requestId?: string }).requestId || 'unknown';
 
-    // Extract Idempotency-Key header
-    const idempotencyKey = req.headers['idempotency-key'] as string;
-    if (!idempotencyKey) {
-      res.status(400).json({
-        error: 'invalid_input',
-        detail: 'Idempotency-Key header is required',
+    // Create base logger (will be bound with context after validation)
+    const baseLog = loggingPort
+      ? loggingPort.bind({
+          requestId,
+          op: 'create_booking',
+        })
+      : createNoOpLogger();
+
+    try {
+      // Validate request body first
+      const body = CreateBookingBodySchema.parse(req.body);
+
+      // Create bound logger with full context (after validation)
+      const log = loggingPort
+        ? loggingPort.bind({
+            requestId,
+            sectorId: body.sectorId || 'unknown',
+            partySize: body.partySize || 0,
+            duration: body.durationMinutes || 0,
+            op: 'create_booking',
+          })
+        : createNoOpLogger();
+
+      log.info('create_booking_request_started', {
+        restaurantId: body.restaurantId,
+        sectorId: body.sectorId,
+        date: body.date,
+        partySize: body.partySize,
+        durationMinutes: body.durationMinutes,
       });
-      return;
+
+      // Extract Idempotency-Key header
+      const idempotencyKey = req.headers['idempotency-key'] as string;
+      if (!idempotencyKey) {
+        const durationMs = Date.now() - startTime;
+        log.warn('create_booking_missing_idempotency_key', {
+          durationMs,
+          outcome: 'invalid_input',
+        });
+        res.status(400).json({
+          error: 'invalid_input',
+          detail: 'Idempotency-Key header is required',
+        });
+        return;
+      }
+
+      // Execute create booking use case
+      const result = await createBookingUseCase.execute({
+        restaurantId: body.restaurantId,
+        sectorId: body.sectorId,
+        partySize: body.partySize,
+        durationMinutes: body.durationMinutes,
+        date: body.date,
+        windowStart: body.windowStart,
+        windowEnd: body.windowEnd,
+        idempotencyKey,
+      });
+
+      const durationMs = Date.now() - startTime;
+      log.info('create_booking_success', {
+        bookingId: result.id,
+        tableIds: result.tableIds,
+        durationMs,
+        outcome: 'success',
+      });
+
+      // Return response
+      res.status(201).json(result);
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      baseLog.error('create_booking_error', error, {
+        durationMs,
+        outcome: 'error',
+      });
+
+      // Re-throw to be handled by error handler middleware
+      throw error;
     }
-
-    // Execute create booking use case
-    const result = await createBookingUseCase.execute({
-      restaurantId: body.restaurantId,
-      sectorId: body.sectorId,
-      partySize: body.partySize,
-      durationMinutes: body.durationMinutes,
-      date: body.date,
-      windowStart: body.windowStart,
-      windowEnd: body.windowEnd,
-      idempotencyKey,
-    });
-
-    // Return response
-    res.status(201).json(result);
   });
 
   /**
@@ -213,19 +270,68 @@ export function createBookingsRouter(
    *               detail: date must be in YYYY-MM-DD format
    */
   router.get('/woki/bookings/day', async (req: Request, res: Response) => {
-    // Validate query parameters
-    const query = ListBookingsQuerySchema.parse(req.query);
+    const startTime = Date.now();
+    const requestId = (req as Request & { requestId?: string }).requestId || 'unknown';
 
-    // Execute list bookings use case
-    const result = await listBookingsUseCase.execute({
-      restaurantId: query.restaurantId,
-      sectorId: query.sectorId,
-      date: query.date,
+    // Create bound logger with context
+    const log = loggingPort
+      ? loggingPort.bind({
+          requestId,
+          sectorId: (req.query.sectorId as string) || 'unknown',
+          op: 'list_bookings',
+        })
+      : createNoOpLogger();
+
+    log.info('list_bookings_request_started', {
+      restaurantId: req.query.restaurantId,
+      sectorId: req.query.sectorId,
+      date: req.query.date,
     });
 
-    // Return response
-    res.status(200).json(result);
+    try {
+      // Validate query parameters
+      const query = ListBookingsQuerySchema.parse(req.query);
+
+      // Execute list bookings use case
+      const result = await listBookingsUseCase.execute({
+        restaurantId: query.restaurantId,
+        sectorId: query.sectorId,
+        date: query.date,
+      });
+
+      const durationMs = Date.now() - startTime;
+      log.info('list_bookings_success', {
+        bookingsCount: result.items.length,
+        durationMs,
+        outcome: 'success',
+      });
+
+      // Return response
+      res.status(200).json(result);
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      log.error('list_bookings_error', error, {
+        durationMs,
+        outcome: 'error',
+      });
+
+      // Re-throw to be handled by error handler middleware
+      throw error;
+    }
   });
 
   return router;
+}
+
+/**
+ * Creates a no-op logger when logging port is not provided.
+ * This allows the code to work without logging in tests or when logging is disabled.
+ */
+function createNoOpLogger() {
+  return {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+  };
 }

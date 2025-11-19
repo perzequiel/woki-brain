@@ -1,5 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
-import CreateBookingUseCase, { CreateBookingError } from '../../application/use_cases/create_booking';
+import CreateBookingUseCase, {
+  CreateBookingError,
+} from '../../application/use_cases/create_booking';
 import Booking from '../../domain/entities/booking';
 import Restaurant from '../../domain/entities/restaurant';
 import Sector from '../../domain/entities/sector';
@@ -113,7 +115,10 @@ function createMockLockManager(): LockManager {
   };
 }
 
-function createRestaurant(id: string, timezone: string = 'America/Argentina/Buenos_Aires'): Restaurant {
+function createRestaurant(
+  id: string,
+  timezone: string = 'America/Argentina/Buenos_Aires'
+): Restaurant {
   return Restaurant.create({
     id,
     name: `Restaurant ${id}`,
@@ -159,10 +164,7 @@ describe('Create Booking Use Case', () => {
       const sector = createSector('S1', 'R1');
       mocks.sectors.set('S1', sector);
 
-      const tables = [
-        createTable('T1', 'S1', 2, 4),
-        createTable('T2', 'S1', 2, 4),
-      ];
+      const tables = [createTable('T1', 'S1', 2, 4), createTable('T2', 'S1', 2, 4)];
       mocks.tables.set('S1', tables);
 
       const useCase = new CreateBookingUseCase(
@@ -365,4 +367,3 @@ describe('Create Booking Use Case', () => {
     });
   });
 });
-

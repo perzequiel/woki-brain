@@ -61,4 +61,3 @@ class CandidateBuilder {
 }
 
 export default CandidateBuilder;
-

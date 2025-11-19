@@ -1,18 +1,19 @@
-import express from 'express';
 import type { Express } from 'express';
+import express from 'express';
 import swaggerUi from 'swagger-ui-express';
-import { swaggerSpec } from './swagger/swaggerConfig';
-import { createDiscoverRouter } from './routers/discoverRouter';
-import { createBookingsRouter } from './routers/bookingsRouter';
-import { errorHandler, requestIdMiddleware } from '../middlewares';
+import { IdempotencyStore } from '../../domain/interfaces/idempotency';
+import { LockManager } from '../../domain/interfaces/locks';
+import { LoggingPort } from '../../domain/interfaces/logging';
 import {
   BookingRepository,
   RestaurantRepository,
   SectorRepository,
   TableRepository,
 } from '../../domain/interfaces/repositories';
-import { IdempotencyStore } from '../../domain/interfaces/idempotency';
-import { LockManager } from '../../domain/interfaces/locks';
+import { errorHandler, requestIdMiddleware } from '../middlewares';
+import { createBookingsRouter } from './routers/bookingsRouter';
+import { createDiscoverRouter } from './routers/discoverRouter';
+import { swaggerSpec } from './swagger/swaggerConfig';
 
 /**
  * Application dependencies
@@ -24,6 +25,7 @@ export interface AppDependencies {
   bookingRepo: BookingRepository;
   idempotencyStore: IdempotencyStore;
   lockManager: LockManager;
+  loggingPort?: LoggingPort; // Optional: if not provided, logging will be no-op
 }
 
 /**
@@ -48,7 +50,8 @@ export function createApp(dependencies: AppDependencies): Express {
       dependencies.restaurantRepo,
       dependencies.sectorRepo,
       dependencies.tableRepo,
-      dependencies.bookingRepo
+      dependencies.bookingRepo,
+      dependencies.loggingPort
     )
   );
   app.use(
@@ -58,7 +61,8 @@ export function createApp(dependencies: AppDependencies): Express {
       dependencies.tableRepo,
       dependencies.bookingRepo,
       dependencies.idempotencyStore,
-      dependencies.lockManager
+      dependencies.lockManager,
+      dependencies.loggingPort
     )
   );
 
@@ -67,4 +71,3 @@ export function createApp(dependencies: AppDependencies): Express {
 
   return app;
 }
-

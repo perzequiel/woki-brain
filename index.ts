@@ -1,3 +1,4 @@
+import { PinoAdapter } from './infrastructure/logging';
 import { InMemoryIdempotencyStore } from './infrastructure/store/idempotency';
 import { InMemoryLockManager } from './infrastructure/store/locks';
 import {
@@ -22,6 +23,7 @@ async function main(): Promise<void> {
   const bookingRepo = new InMemoryBookingRepository();
   const idempotencyStore = new InMemoryIdempotencyStore();
   const lockManager = new InMemoryLockManager();
+  const loggingPort = new PinoAdapter();
 
   // Load seed data
   await seedData(restaurantRepo, sectorRepo, tableRepo, bookingRepo);
@@ -34,6 +36,7 @@ async function main(): Promise<void> {
     bookingRepo,
     idempotencyStore,
     lockManager,
+    loggingPort,
   });
 
   // Start server

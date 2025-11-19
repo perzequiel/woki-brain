@@ -1,5 +1,6 @@
 import { Request, Response, Router } from 'express';
 import DiscoverSeatsUseCase from '../../../application/use_cases/discover_seats';
+import { LoggingPort } from '../../../domain/interfaces/logging';
 import {
   BookingRepository,
   RestaurantRepository,
@@ -15,13 +16,15 @@ import { DiscoverQuerySchema } from '../schemas';
  * @param sectorRepo - Sector repository
  * @param tableRepo - Table repository
  * @param bookingRepo - Booking repository
+ * @param loggingPort - Optional logging port for structured logging
  * @returns Express router
  */
 export function createDiscoverRouter(
   restaurantRepo: RestaurantRepository,
   sectorRepo: SectorRepository,
   tableRepo: TableRepository,
-  bookingRepo: BookingRepository
+  bookingRepo: BookingRepository,
+  loggingPort?: LoggingPort
 ): Router {
   const router = Router();
   const discoverSeatsUseCase = new DiscoverSeatsUseCase();
@@ -156,59 +159,174 @@ export function createDiscoverRouter(
    *               detail: Window does not intersect service hours
    */
   router.get('/woki/discover', async (req: Request, res: Response) => {
-    // Validate query parameters
-    const query = DiscoverQuerySchema.parse(req.query);
+    const startTime = Date.now();
+    const requestId = (req as Request & { requestId?: string }).requestId || 'unknown';
 
-    // Get restaurant
-    const restaurant = await restaurantRepo.findById(query.restaurantId);
-    if (!restaurant) {
-      res.status(404).json({
-        error: 'not_found',
-        detail: 'Restaurant not found',
-      });
-      return;
-    }
+    // Create bound logger with context
+    const log = loggingPort
+      ? loggingPort.bind({
+          requestId,
+          sectorId: (req.query.sectorId as string) || 'unknown',
+          partySize: Number(req.query.partySize) || 0,
+          duration: Number(req.query.duration) || 0,
+          op: 'discover',
+        })
+      : createNoOpLogger();
 
-    // Get sector
-    const sector = await sectorRepo.findById(query.sectorId);
-    if (!sector || sector.restaurantId !== query.restaurantId) {
-      res.status(404).json({
-        error: 'not_found',
-        detail: 'Sector not found',
-      });
-      return;
-    }
-
-    // Get tables
-    const tables = await tableRepo.findBySectorId(query.sectorId);
-    if (tables.length === 0) {
-      res.status(404).json({
-        error: 'not_found',
-        detail: 'No tables found for sector',
-      });
-      return;
-    }
-
-    // Get existing bookings
-    const bookings = await bookingRepo.findByRestaurantAndDate(query.restaurantId, query.date);
-
-    // Execute discover use case
-    const result = discoverSeatsUseCase.execute({
-      tables,
-      bookings,
-      date: query.date,
-      partySize: query.partySize,
-      durationMinutes: query.duration,
-      serviceWindows: restaurant.windows,
-      timezone: restaurant.timezone,
-      windowStart: query.windowStart,
-      windowEnd: query.windowEnd,
-      limit: query.limit,
+    log.info('discover_request_started', {
+      restaurantId: req.query.restaurantId,
+      sectorId: req.query.sectorId,
+      date: req.query.date,
+      partySize: req.query.partySize,
+      duration: req.query.duration,
     });
 
-    // Return response
-    res.status(200).json(result);
+    try {
+      // Validate query parameters
+      const query = DiscoverQuerySchema.parse(req.query);
+
+      // Get restaurant
+      const restaurant = await restaurantRepo.findById(query.restaurantId);
+      if (!restaurant) {
+        const durationMs = Date.now() - startTime;
+        log.warn('discover_restaurant_not_found', {
+          restaurantId: query.restaurantId,
+          durationMs,
+          outcome: 'not_found',
+        });
+        res.status(404).json({
+          error: 'not_found',
+          detail: 'Restaurant not found',
+        });
+        return;
+      }
+
+      // Get sector
+      const sector = await sectorRepo.findById(query.sectorId);
+      if (!sector || sector.restaurantId !== query.restaurantId) {
+        const durationMs = Date.now() - startTime;
+        log.warn('discover_sector_not_found', {
+          sectorId: query.sectorId,
+          durationMs,
+          outcome: 'not_found',
+        });
+        res.status(404).json({
+          error: 'not_found',
+          detail: 'Sector not found',
+        });
+        return;
+      }
+
+      // Get tables
+      const tables = await tableRepo.findBySectorId(query.sectorId);
+      if (tables.length === 0) {
+        const durationMs = Date.now() - startTime;
+        log.warn('discover_no_tables', {
+          sectorId: query.sectorId,
+          durationMs,
+          outcome: 'not_found',
+        });
+        res.status(404).json({
+          error: 'not_found',
+          detail: 'No tables found for sector',
+        });
+        return;
+      }
+
+      // Validate window against service windows if provided
+      if (
+        query.windowStart &&
+        query.windowEnd &&
+        restaurant.windows &&
+        restaurant.windows.length > 0
+      ) {
+        const windowOverlaps = restaurant.windows.some((window) => {
+          // Check if requested window overlaps with any service window
+          return !(query.windowEnd! <= window.start || query.windowStart! >= window.end);
+        });
+
+        if (!windowOverlaps) {
+          const durationMs = Date.now() - startTime;
+          log.warn('discover_outside_service_window', {
+            windowStart: query.windowStart,
+            windowEnd: query.windowEnd,
+            durationMs,
+            outcome: 'outside_service_window',
+          });
+          res.status(422).json({
+            error: 'outside_service_window',
+            detail: 'Window does not intersect service hours',
+          });
+          return;
+        }
+      }
+
+      // Get existing bookings
+      const bookings = await bookingRepo.findByRestaurantAndDate(query.restaurantId, query.date);
+
+      // Execute discover use case
+      const result = discoverSeatsUseCase.execute({
+        tables,
+        bookings,
+        date: query.date,
+        partySize: query.partySize,
+        durationMinutes: query.duration,
+        serviceWindows: restaurant.windows,
+        timezone: restaurant.timezone,
+        windowStart: query.windowStart,
+        windowEnd: query.windowEnd,
+        limit: query.limit,
+      });
+
+      const durationMs = Date.now() - startTime;
+
+      // Check if no candidates found
+      if (result.candidates.length === 0) {
+        log.warn('discover_no_capacity', {
+          candidatesCount: 0,
+          durationMs,
+          outcome: 'no_capacity',
+        });
+        res.status(409).json({
+          error: 'no_capacity',
+          detail: 'No single or combo gap fits duration within window',
+        });
+        return;
+      }
+
+      // Log success
+      log.info('discover_success', {
+        candidatesCount: result.candidates.length,
+        durationMs,
+        outcome: 'success',
+      });
+
+      // Return response
+      res.status(200).json(result);
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      log.error('discover_error', error, {
+        durationMs,
+        outcome: 'error',
+      });
+
+      // Re-throw to be handled by error handler middleware
+      throw error;
+    }
   });
 
   return router;
+}
+
+/**
+ * Creates a no-op logger when logging port is not provided.
+ * This allows the code to work without logging in tests or when logging is disabled.
+ */
+function createNoOpLogger() {
+  return {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+  };
 }

@@ -6,7 +6,8 @@ const swaggerDefinition: SwaggerDefinition = {
   info: {
     title: 'WokiBrain API',
     version: '1.0.0',
-    description: 'WokiBrain booking engine API - Discover seats, create bookings, and list bookings',
+    description:
+      'WokiBrain booking engine API - Discover seats, create bookings, and list bookings',
     contact: {
       name: 'WokiBrain',
     },
@@ -306,4 +307,3 @@ const options: swaggerJsdoc.Options = {
 };
 
 export const swaggerSpec = swaggerJsdoc(options);
-
