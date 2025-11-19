@@ -77,9 +77,12 @@ describe('Gap Discovery Service', () => {
 
       // Should find gap from 21:00 to 22:00
       expect(gaps.length).toBeGreaterThan(0);
+      // Find gap that starts around 21:00 (check ISO string to avoid timezone issues)
+      const expectedStart = new Date('2025-10-22T21:00:00-03:00');
       const gap = gaps.find((g) => {
-        const startHour = g.start.getHours();
-        return startHour === 21;
+        // Check if gap starts within 15 minutes of expected time (allowing for grid alignment)
+        const timeDiff = Math.abs(g.start.getTime() - expectedStart.getTime());
+        return timeDiff < 15 * 60 * 1000; // 15 minutes in milliseconds
       });
       expect(gap).toBeDefined();
       expect(gap!.durationMinutes).toBeGreaterThanOrEqual(60);
@@ -188,23 +191,12 @@ describe('Gap Discovery Service', () => {
       });
 
       // All gaps should be within service window
+      const windowStart = new Date('2025-10-22T20:00:00-03:00');
+      const windowEnd = new Date('2025-10-22T23:45:00-03:00');
       gaps.forEach((gap) => {
-        const gapStartHour = gap.start.getHours();
-        const gapStartMin = gap.start.getMinutes();
-        const gapEndHour = gap.end.getHours();
-        const gapEndMin = gap.end.getMinutes();
-
-        // Gap should start at or after 20:00
-        expect(gapStartHour).toBeGreaterThanOrEqual(20);
-        if (gapStartHour === 20) {
-          expect(gapStartMin).toBeGreaterThanOrEqual(0);
-        }
-
-        // Gap should end at or before 23:45
-        expect(gapEndHour).toBeLessThanOrEqual(23);
-        if (gapEndHour === 23) {
-          expect(gapEndMin).toBeLessThanOrEqual(45);
-        }
+        // Use timestamp comparison to avoid timezone issues
+        expect(gap.start.getTime()).toBeGreaterThanOrEqual(windowStart.getTime());
+        expect(gap.end.getTime()).toBeLessThanOrEqual(windowEnd.getTime());
       });
     });
 
@@ -222,9 +214,10 @@ describe('Gap Discovery Service', () => {
       });
 
       // Should only return gaps within the service window
+      const windowStart = new Date('2025-10-22T20:00:00-03:00');
       gaps.forEach((gap) => {
-        const gapStartHour = gap.start.getHours();
-        expect(gapStartHour).toBeGreaterThanOrEqual(20);
+        // Use timestamp comparison to avoid timezone issues
+        expect(gap.start.getTime()).toBeGreaterThanOrEqual(windowStart.getTime());
       });
     });
   });

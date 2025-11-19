@@ -125,7 +125,10 @@ describe('WokiBrain Selection Service', () => {
 
       expect(result.hasCapacity).toBe(true);
       expect(result.candidate).toBeDefined();
-      expect(result.candidate!.gap.start.getHours()).toBe(20);
+      // Use timestamp comparison to avoid timezone issues
+      const expectedStart = new Date('2025-10-22T20:00:00-03:00');
+      const timeDiff = Math.abs(result.candidate!.gap.start.getTime() - expectedStart.getTime());
+      expect(timeDiff).toBeLessThan(15 * 60 * 1000); // Within 15 minutes (grid alignment)
     });
 
     test('Returns null when no valid candidates', () => {

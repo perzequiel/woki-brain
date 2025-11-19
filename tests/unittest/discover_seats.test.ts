@@ -178,10 +178,11 @@ describe('Discover Seats Use Case - Integrated', () => {
       });
 
       // All candidates should be within service window
+      const windowStart = new Date('2025-10-22T20:00:00-03:00');
       result.candidates.forEach((candidate) => {
         const startDate = new Date(candidate.start);
-        const hour = startDate.getHours();
-        expect(hour).toBeGreaterThanOrEqual(20);
+        // Use timestamp comparison to avoid timezone issues
+        expect(startDate.getTime()).toBeGreaterThanOrEqual(windowStart.getTime());
       });
     });
   });
@@ -327,26 +328,18 @@ describe('Discover Seats Use Case - Integrated', () => {
       // Should only use service windows that overlap with requested window
       // The filtered service window should be 20:00-22:00
       expect(result.candidates.length).toBeGreaterThan(0);
+      // Use timestamp comparison to avoid timezone issues
+      const windowStart = new Date('2025-10-22T20:00:00-03:00');
+      const windowEnd = new Date('2025-10-22T22:00:00-03:00');
       result.candidates.forEach((candidate) => {
         const startDate = new Date(candidate.start);
         const endDate = new Date(candidate.end);
 
-        // Convert to Argentina timezone (-03:00)
-        // ISO string is in UTC, so we need to adjust
-        // For Argentina timezone, subtract 3 hours from UTC
-        const startHourArgentina = startDate.getUTCHours() - 3;
-        const endHourArgentina = endDate.getUTCHours() - 3;
-
-        // Adjust for day rollover (if negative, add 24)
-        const adjustedStartHour =
-          startHourArgentina < 0 ? startHourArgentina + 24 : startHourArgentina;
-        const adjustedEndHour = endHourArgentina < 0 ? endHourArgentina + 24 : endHourArgentina;
-
         // Candidate should start at or after 20:00 and end at or before 22:00
         // (in Argentina timezone)
-        expect(adjustedStartHour).toBeGreaterThanOrEqual(20);
-        expect(adjustedStartHour).toBeLessThan(22);
-        expect(adjustedEndHour).toBeLessThanOrEqual(22);
+        expect(startDate.getTime()).toBeGreaterThanOrEqual(windowStart.getTime());
+        expect(startDate.getTime()).toBeLessThan(windowEnd.getTime());
+        expect(endDate.getTime()).toBeLessThanOrEqual(windowEnd.getTime());
       });
     });
   });

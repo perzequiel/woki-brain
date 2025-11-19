@@ -191,9 +191,10 @@ describe('Combo Intersection Service', () => {
       );
 
       // All gaps should be within service window
+      const windowStart = new Date('2025-10-22T20:00:00-03:00');
       comboGaps.forEach((gap) => {
-        const gapStartHour = gap.start.getHours();
-        expect(gapStartHour).toBeGreaterThanOrEqual(20);
+        // Use timestamp comparison to avoid timezone issues
+        expect(gap.start.getTime()).toBeGreaterThanOrEqual(windowStart.getTime());
       });
     });
 
